@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader — Whole Earth</title>
+<style>
+  :root{ --paper:#f5f2ea; --ink:#191713; --fade:#8a8578; --line:#d8d2c4; --red:#b3372a; --dark:#14120e; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--dark);color:#e8e4d8;font-family:Georgia,'Times New Roman',serif;min-height:100vh}
+  a{color:inherit;text-decoration:none}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  /* top bar */
+  .bar{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:14px;
+    padding:10px 18px;background:rgba(20,18,14,.92);backdrop-filter:blur(6px);border-bottom:1px solid #2c2921;
+    font-family:'Courier New',monospace;font-size:12px;letter-spacing:.05em;transition:transform .25s ease}
+  .bar.hide{transform:translateY(-100%)}
+  .bar .back{color:var(--fade)}
+  .bar .back:hover{color:#fff}
+  .bar .title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#cfc9b8;font-family:Georgia,serif;font-size:14px;letter-spacing:0}
+  .seg{display:flex;border:1px solid #3a362b}
+  .seg button{padding:5px 10px;color:var(--fade);font-family:'Courier New',monospace;font-size:11px;letter-spacing:.08em}
+  .seg button.on{background:#e8e4d8;color:var(--dark)}
+  .pg{color:var(--fade);min-width:74px;text-align:center}
+  .ext{color:var(--fade)} .ext:hover{color:#fff}
+  @media(max-width:760px){ .seg .lbl{display:none} .bar{gap:8px} }
+  /* stage */
+  #stage{padding-top:58px;min-height:100vh;display:flex;align-items:center;justify-content:center;gap:14px}
+  .page{position:relative;line-height:0}
+  .page img{max-width:96vw;max-height:calc(100vh - 96px);width:auto;height:auto;box-shadow:0 6px 40px rgba(0,0,0,.55);background:#e9e4d8}
+  body.spread #stage{gap:0}
+  body.spread .page img{max-width:48vw;max-height:calc(100vh - 96px);box-shadow:0 6px 30px rgba(0,0,0,.5)}
+  body.wide .page img{max-width:none;width:min(1100px,96vw);height:auto;max-height:none}
+  body.wide #stage{align-items:flex-start;flex-direction:column;padding-bottom:60px}
+  body.wide.spread .page img{width:min(540px,48vw)}
+  .pnum{position:absolute;bottom:-22px;left:0;right:0;text-align:center;font-family:'Courier New',monospace;font-size:10px;color:#5c574a;line-height:1.4}
+  /* nav zones */
+  .zone{position:fixed;top:58px;bottom:0;width:16vw;z-index:15;cursor:pointer;opacity:0;transition:opacity .15s;
+    display:flex;align-items:center;font-size:34px;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.6)}
+  .zone:hover{opacity:.85}
+  #prev{left:0;justify-content:flex-start;padding-left:14px;background:linear-gradient(90deg,rgba(0,0,0,.25),transparent)}
+  #next{right:0;justify-content:flex-end;padding-right:14px;background:linear-gradient(-90deg,rgba(0,0,0,.25),transparent)}
+  /* grid mode */
+  #grid{display:none;padding:74px 3vw 80px;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:16px}
+  body.gridmode #grid{display:grid}
+  body.gridmode #stage, body.gridmode .zone{display:none}
+  #grid .th{position:relative;cursor:pointer;line-height:0;opacity:.85}
+  #grid .th:hover{opacity:1;outline:1px solid var(--red)}
+  #grid .th.cur{outline:2px solid var(--red)}
+  #grid img{width:100%;background:#e9e4d8}
+  #grid .n{position:absolute;top:4px;left:4px;background:rgba(20,18,14,.8);color:#cfc9b8;font-family:'Courier New',monospace;font-size:10px;padding:2px 5px;line-height:1.2}
+  /* progress */
+  #prog{position:fixed;left:0;bottom:0;height:3px;background:var(--red);width:0;z-index:20;transition:width .2s}
+  /* loading */
+  #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:var(--fade);
+    font-family:'Courier New',monospace;font-size:12px;letter-spacing:.2em;z-index:5}
+  .err{color:#a09a88;font-size:14px;font-style:italic;text-align:center;padding:20px}
+</style>
+</head>
+<body>
+<div class="bar" id="bar">
+  <a class="back" href="index.html">← INDEX</a>
+  <span class="title" id="title">…</span>
+  <span class="pg" id="pglabel"></span>
+  <div class="seg" id="modeseg">
+    <button data-mode="single" class="on">PAGE</button>
+    <button data-mode="spread">SPREAD</button>
+    <button data-mode="grid">GRID</button>
+  </div>
+  <div class="seg">
+    <button id="zoomfit" class="on">FIT</button>
+    <button id="zoomwide">WIDE</button>
+  </div>
+  <a class="ext" id="ialink" target="_blank" rel="noopener">ARCHIVE.ORG ↗</a>
+</div>
+<div id="loading">LOADING…</div>
+<div id="stage"></div>
+<div id="grid"></div>
+<div class="zone" id="prev">‹</div>
+<div class="zone" id="next">›</div>
+<div id="prog"></div>
+<script src="data.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const pub = PUBS.find(p => p.slug === params.get('p')) || PUBS[0];
+const N = pub.pages;
+const base = `https://archive.org/download/${pub.id}/page/`;
+const imgUrl = (i, size) => `${base}n${i}_${size}.jpg`;
+document.title = pub.title + ' — Whole Earth';
+document.getElementById('title').textContent = pub.title + (pub.editor ? ' — ' + pub.editor : '');
+document.getElementById('ialink').href = pub.link || ('https://archive.org/details/' + pub.id);
+const stage = document.getElementById('stage'), grid = document.getElementById('grid'),
+      pglabel = document.getElementById('pglabel'), prog = document.getElementById('prog'),
+      loading = document.getElementById('loading');
+let cur = Math.min(Math.max(parseInt((location.hash.match(/page=(\d+)/)||[])[1] || 0, 10), 0), N-1);
+let mode = 'single';
+
+function pagePair(i){
+  // spread pairs: cover alone, then 2-3, 4-5 ...
+  if (i === 0) return [0];
+  return i % 2 === 1 ? [i, i+1].filter(x => x < N) : [i, i+1].filter(x => x < N);
+}
+
+function render(){
+  history.replaceState(null, '', `?p=${pub.slug}#page=${cur}`);
+  prog.style.width = ((cur+1)/N*100) + '%';
+  grid.querySelectorAll('.th').forEach(t => t.classList.toggle('cur', +t.dataset.i === cur));
+  if (mode === 'grid'){ pglabel.textContent = `${N} PAGES`; return; }
+  const pages = mode === 'spread' ? pagePair(cur) : [cur];
+  pglabel.textContent = pages.map(p=>p+1).join('–') + ' / ' + N;
+  stage.innerHTML = '';
+  let pending = pages.length;
+  pages.forEach(i => {
+    const d = document.createElement('div');
+    d.className = 'page';
+    const img = new Image();
+    img.src = imgUrl(i, 'w1000');
+    img.alt = pub.title + ' page ' + (i+1);
+    img.onload = () => { if (--pending === 0) loading.style.display = 'none'; };
+    img.onerror = () => {
+      img.onerror = null;
+      img.src = imgUrl(i, 'medium');
+      img.onerror = () => { d.innerHTML = '<div class="err">page unavailable</div>'; if(--pending===0) loading.style.display='none'; };
+    };
+    d.appendChild(img);
+    const n = document.createElement('div');
+    n.className = 'pnum'; n.textContent = 'p. ' + (i+1);
+    d.appendChild(n);
+    stage.appendChild(d);
+  });
+  // preload ahead
+  const ahead = mode === 'spread' ? [pages[pages.length-1]+1, pages[pages.length-1]+2, pages[pages.length-1]+3] : [cur+1, cur+2];
+  ahead.filter(i => i >= 0 && i < N).forEach(i => { const p = new Image(); p.src = imgUrl(i, 'w1000'); });
+  window.scrollTo(0, 0);
+}
+function go(i){
+  cur = Math.min(Math.max(i, 0), N-1);
+  render();
+}
+function step(dir){
+  if (mode === 'grid'){ go(cur + dir); setMode('single'); return; }
+  const stepN = mode === 'spread' ? (cur === 0 && dir > 0 ? 1 : 2) : 1;
+  go(cur + dir * stepN);
+}
+document.getElementById('next').onclick = () => step(1);
+document.getElementById('prev').onclick = () => step(-1);
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); step(1); }
+  if (e.key === 'ArrowLeft') step(-1);
+  if (e.key === 'Home') go(0);
+  if (e.key === 'End') go(N-1);
+  if (e.key === 'g') setMode('grid');
+  if (e.key === 'Escape' && mode === 'grid') setMode('single');
+});
+// swipe
+let tx = null;
+document.addEventListener('touchstart', e => tx = e.touches[0].clientX, {passive:true});
+document.addEventListener('touchend', e => {
+  if (tx === null) return;
+  const dx = e.changedTouches[0].clientX - tx;
+  if (Math.abs(dx) > 60) step(dx < 0 ? 1 : -1);
+  tx = null;
+}, {passive:true});
+// modes
+function setMode(m){
+  mode = m;
+  document.body.classList.toggle('gridmode', m === 'grid');
+  document.body.classList.toggle('spread', m === 'spread');
+  document.querySelectorAll('#modeseg button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  render();
+  if (m === 'grid'){ const c = grid.querySelector('.th.cur'); if (c) c.scrollIntoView({block:'center'}); }
+}
+document.querySelectorAll('#modeseg button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+document.getElementById('zoomfit').onclick = () => { document.body.classList.remove('wide'); zsync(); };
+document.getElementById('zoomwide').onclick = () => { document.body.classList.add('wide'); zsync(); };
+function zsync(){
+  document.getElementById('zoomfit').classList.toggle('on', !document.body.classList.contains('wide'));
+  document.getElementById('zoomwide').classList.toggle('on', document.body.classList.contains('wide'));
+}
+// build grid thumbnails lazily
+for (let i = 0; i < N; i++){
+  const t = document.createElement('div');
+  t.className = 'th'; t.dataset.i = i;
+  t.innerHTML = `<img loading="lazy" src="${imgUrl(i,'medium')}" alt="page ${i+1}"
+    onerror="this.onerror=null;this.style.minHeight='160px';this.style.background='#2c2921'"><span class="n">${i+1}</span>`;
+  t.onclick = () => { go(i); if (mode === 'grid') setMode('single'); };
+  grid.appendChild(t);
+}
+// auto-hide bar in reading modes
+let hideT;
+document.addEventListener('mousemove', () => {
+  bar.classList.remove('hide'); clearTimeout(hideT);
+  hideT = setTimeout(() => { if (mode !== 'grid') bar.classList.add('hide'); }, 2600);
+});
+render();
+</script>
+</body>
+</html>
