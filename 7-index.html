@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Whole Earth — Digital Reading Room</title>
+<meta name="description" content="Read every Whole Earth publication, 1968-2002. Scans hosted by the Internet Archive.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f5f2ea; --ink:#191713; --fade:#7a756a; --line:#d8d2c4; --red:#b3372a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--paper);color:var(--ink);font-family:'Newsreader',Georgia,serif;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  header{padding:56px 6vw 32px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:'Courier Prime',monospace;font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--red)}
+  h1{font-size:clamp(38px,7vw,84px);font-weight:400;line-height:.98;letter-spacing:-.02em;margin:14px 0 18px}
+  h1 em{font-style:italic}
+  .sub{max-width:640px;color:var(--fade);font-size:16px;line-height:1.55}
+  .toolbar{position:sticky;top:0;z-index:10;background:var(--paper);border-bottom:1px solid var(--line);
+    padding:12px 6vw;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+  .toolbar input{flex:1;min-width:200px;background:transparent;border:none;border-bottom:1px solid var(--ink);
+    font:inherit;font-size:16px;padding:6px 2px;outline:none}
+  .toolbar input::placeholder{color:var(--fade)}
+  .count{font-family:'Courier Prime',monospace;font-size:12px;color:var(--fade);letter-spacing:.1em}
+  nav.jump{display:flex;gap:14px;flex-wrap:wrap;font-family:'Courier Prime',monospace;font-size:12px}
+  nav.jump a{color:var(--fade);border-bottom:1px solid transparent}
+  nav.jump a:hover{color:var(--red);border-color:var(--red)}
+  section{padding:44px 6vw 12px}
+  h2{font-weight:400;font-size:clamp(24px,3.4vw,40px);letter-spacing:-.01em;margin-bottom:6px}
+  .colmeta{font-family:'Courier Prime',monospace;font-size:12px;color:var(--fade);margin-bottom:26px;letter-spacing:.08em}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:34px 22px}
+  .card{display:block}
+  .cover{position:relative;background:#e9e4d8;border:1px solid var(--line);overflow:hidden;
+    aspect-ratio:3/4;transition:transform .18s ease, box-shadow .18s ease}
+  .cover img{width:100%;height:100%;object-fit:cover;display:block;filter:saturate(.96)}
+  .card:hover .cover{transform:translateY(-4px);box-shadow:0 14px 28px rgba(25,23,19,.18)}
+  .ct{font-size:14px;margin-top:10px;line-height:1.3}
+  .cm{font-family:'Courier Prime',monospace;font-size:11px;color:var(--fade);margin-top:3px;letter-spacing:.04em}
+  .hidden{display:none}
+  footer{margin-top:70px;border-top:1px solid var(--line);padding:26px 6vw 60px;color:var(--fade);font-size:13px;line-height:1.7}
+  footer a{border-bottom:1px solid var(--line)}
+  footer a:hover{color:var(--red);border-color:var(--red)}
+  .noresults{padding:60px 6vw;color:var(--fade);font-style:italic;display:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="kicker">1968 — 2002 · 147 publications · 22,035 pages</div>
+  <h1>Whole Earth<br><em>reading room</em></h1>
+  <p class="sub">Every catalog, quarterly and review from Stewart Brand's Whole Earth universe, readable online.
+  Page scans stream from the Internet Archive. Access to tools.</p>
+</header>
+<div class="toolbar">
+  <input id="q" type="search" placeholder="Search titles, editors, ideas…" autocomplete="off">
+  <span class="count" id="count"></span>
+  <nav class="jump" id="jump"></nav>
+</div>
+<main id="main"></main>
+<div class="noresults" id="noresults">Nothing matches. Try another word.</div>
+<footer>
+  <p>Scans hosted by the <a href="https://archive.org/details/wholeearth">Internet Archive Whole Earth Collection</a>,
+  indexed by the <a href="https://wholeearth.info/">Whole Earth Index</a> (Gray Area / Barry Threw, design Jon Gacnik &amp; Mindy Seu).
+  Made available for scholarship, education and research. This reading room only links to and embeds those hosted scans.</p>
+  <p style="margin-top:8px">"We are as gods and might as well get good at it." — Stewart Brand, 1968</p>
+</footer>
+<script src="data.js"></script>
+<script>
+const IA = id => `https://archive.org/download/${id}/page/cover_medium.jpg`;
+const main = document.getElementById('main');
+const jump = document.getElementById('jump');
+const secs = [];
+COLLECTION_ORDER.forEach((col, ci) => {
+  const pubs = PUBS.filter(p => p.collection === col);
+  if (!pubs.length) return;
+  const sec = document.createElement('section');
+  sec.id = 'col' + ci;
+  const years = pubs.map(p=>p.year).filter(Boolean);
+  sec.innerHTML = `<h2>${col}</h2>
+    <div class="colmeta">${pubs.length} publications · ${Math.min(...years)}–${Math.max(...years)}</div>
+    <div class="grid"></div>`;
+  const grid = sec.querySelector('.grid');
+  pubs.forEach(p => {
+    const a = document.createElement('a');
+    a.className = 'card';
+    a.href = `reader.html?p=${p.slug}`;
+    a.dataset.search = `${p.title} ${p.editor||''} ${p.summary||''} ${p.year||''}`.toLowerCase();
+    const meta = [p.season, p.year, p.pages + ' pp'].filter(Boolean).join(' · ');
+    a.innerHTML = `<div class="cover"><img loading="lazy" src="${IA(p.id)}" alt="${p.title.replace(/"/g,'&quot;')}"
+        onerror="this.onerror=null;this.src='https://archive.org/download/${p.id}/page/n0_medium.jpg'"></div>
+      <div class="ct">${p.title}</div><div class="cm">${meta}</div>`;
+    grid.appendChild(a);
+  });
+  main.appendChild(sec);
+  secs.push(sec);
+  const j = document.createElement('a');
+  j.href = '#col' + ci; j.textContent = col.replace('Whole Earth ','W.E. ');
+  jump.appendChild(j);
+});
+const q = document.getElementById('q'), count = document.getElementById('count'), nores = document.getElementById('noresults');
+function updateCount(n){ count.textContent = n + ' / ' + PUBS.length; }
+updateCount(PUBS.length);
+q.addEventListener('input', () => {
+  const term = q.value.trim().toLowerCase();
+  let visible = 0;
+  secs.forEach(sec => {
+    let secVisible = 0;
+    sec.querySelectorAll('.card').forEach(c => {
+      const show = !term || c.dataset.search.includes(term);
+      c.classList.toggle('hidden', !show);
+      if (show) secVisible++;
+    });
+    sec.classList.toggle('hidden', secVisible === 0);
+    visible += secVisible;
+  });
+  nores.style.display = visible ? 'none' : 'block';
+  updateCount(visible);
+});
+</script>
+</body>
+</html>
